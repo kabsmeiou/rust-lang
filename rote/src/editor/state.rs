@@ -1,4 +1,4 @@
-use crate::editor::{Buffer, Cursor, Command};
+use super::{command::Command, buffer::Buffer, cursor::Cursor};
 
 pub struct Editor {
     buffer: Buffer,
@@ -32,6 +32,7 @@ impl Editor {
 
 impl Editor {
     // functions to handle commands
+    /* at what position? what characters are allowed? */
     fn insert_char(&mut self, c: char) {
     }
     fn backspace(&mut self)  {
