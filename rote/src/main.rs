@@ -1,11 +1,22 @@
-use std::io::{self, Write};
+use std::io::{self, Write, Stdout, stdout};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use crossterm::terminal::{enable_raw_mode, disable_raw_mode};
-use crossterm::execute;
+
+// we treat each cell as a character
+// new lines will be a \n
+// i think can store it as an array?
+struct Pad {
+    bytes: Vec<u8> // 4bytes
+}
+
+fn render_pad(bytes: &Vec<u8>) {
+    unimplemented!();
+}
 
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
-    let mut current_data = String::new();
+    let mut pad = Pad { bytes: Vec::new() };
+    let mut temp = [0; 4];
     loop {
         if let Event::Key(key_event) = event::read()? {
             match key_event.code {
@@ -13,28 +24,18 @@ fn main() -> io::Result<()> {
                     if c == 'q' {
                         break;
                     };
-                    current_data.push(c);
-                    // printing here the whole updated string with carriage return (\r) so that
-                    // line stays clean. then we flush
-                    print!("\r{}", current_data);
-                    io::stdout().flush().expect("Failed to flush");
+                    pad.bytes.extend_from_slice(c.encode_utf8(&mut temp).as_bytes());
                 },
                 KeyCode::Up => println!("Pressed Up"),
                 KeyCode::Down => println!("Pressed Down"),
                 KeyCode::Left => println!("Pressed Left"),
                 KeyCode::Right => println!("Pressed Right"),
-                KeyCode::Backspace => {
-                    match current_data.pop() {
-                        Some(_) => {
-                            print!("\r{}\x1b[K", current_data);
-                            io::stdout().flush().expect("Failed to flush");
-                        }
-                        None => {}
-                    }
-                }
+                KeyCode::Enter => pad.bytes.extend_from_slice('\n'.encode_utf8(&mut temp).as_bytes()),
+                KeyCode::Backspace => println!("backspace"),
                 KeyCode::Esc => break,
                 _ => println!("other key pressed {:?}", key_event.code),
             }
+            render_pad(&pad.bytes);
         }
     }
     disable_raw_mode()?;
