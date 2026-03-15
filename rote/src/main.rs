@@ -1,43 +1,74 @@
-use std::io::{self, Write, Stdout, stdout};
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use crossterm::terminal::{enable_raw_mode, disable_raw_mode};
+use std::io::{self, Write};
+use crossterm::event::{self, Event, KeyCode};
+use crossterm::terminal::{self, ClearType, enable_raw_mode, disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::{QueueableCommand, cursor};
 
-// we treat each cell as a character
-// new lines will be a \n
-// i think can store it as an array?
-struct Pad {
-    bytes: Vec<u8> // 4bytes
+#[derive(Clone, Debug)]
+struct Editor {
+    lines: Vec<String>,
+    loc_x: usize,
+    loc_y: usize,
 }
+fn render_pad(editor: Editor) {
+    let mut stdout = io::stdout();
 
-fn render_pad(bytes: &Vec<u8>) {
-    unimplemented!();
+    stdout.queue(cursor::MoveTo(0, 0)).unwrap();
+    stdout.queue(terminal::Clear(ClearType::All)).unwrap();
+
+    for (i, line) in editor.lines.iter().enumerate() {
+        stdout.queue(cursor::MoveTo(0, i as u16)).unwrap();
+        write!(stdout, "{}", line).unwrap();
+    }
+
+    stdout.queue(cursor::MoveTo(editor.loc_x as u16, editor.loc_y as u16)).unwrap();
+
+    stdout.flush().expect("failed to flush");
 }
 
 fn main() -> io::Result<()> {
+    let mut stdout = io::stdout();
+    
+    stdout.queue(EnterAlternateScreen)?;
     enable_raw_mode()?;
-    let mut pad = Pad { bytes: Vec::new() };
-    let mut temp = [0; 4];
+    
+    let mut editor = Editor { lines: vec![String::new()], loc_x: 0, loc_y: 0 };
+    render_pad(editor.clone());
+    
     loop {
         if let Event::Key(key_event) = event::read()? {
             match key_event.code {
                 KeyCode::Char(c) => {
-                    if c == 'q' {
-                        break;
-                    };
-                    pad.bytes.extend_from_slice(c.encode_utf8(&mut temp).as_bytes());
-                },
-                KeyCode::Up => println!("Pressed Up"),
-                KeyCode::Down => println!("Pressed Down"),
-                KeyCode::Left => println!("Pressed Left"),
-                KeyCode::Right => println!("Pressed Right"),
-                KeyCode::Enter => pad.bytes.extend_from_slice('\n'.encode_utf8(&mut temp).as_bytes()),
-                KeyCode::Backspace => println!("backspace"),
-                KeyCode::Esc => break,
-                _ => println!("other key pressed {:?}", key_event.code),
+                if c == 'q' {
+                    break; 
+                }
+                if editor.lines.is_empty() {
+                    editor.lines.push(String::new());
+                }
+            editor.lines[editor.loc_y].insert(editor.loc_x, c);
+            editor.loc_x += 1;
+        },
+        KeyCode::Enter => {
+            editor.lines.push(String::new());
+            editor.loc_y += 1;
+            editor.loc_x = 0;
+        },
+        KeyCode::Backspace => {
+            if editor.loc_x > 0 {
+                editor.lines[editor.loc_y].remove(editor.loc_x - 1);
+                editor.loc_x -= 1;
             }
-            render_pad(&pad.bytes);
+        }
+        KeyCode::Esc => break,
+            _ => {},
+        }
+            render_pad(editor.clone());
         }
     }
+    
+    // Exit alternate screen and disable raw mode
     disable_raw_mode()?;
+    stdout.queue(LeaveAlternateScreen)?;
+    stdout.flush()?;
+    
     Ok(())
 }
