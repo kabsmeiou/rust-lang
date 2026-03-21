@@ -1,74 +1,108 @@
 use std::io::{self, Write};
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::terminal::{self, ClearType, enable_raw_mode, disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
-use crossterm::{QueueableCommand, cursor};
+use crossterm::{ExecutableCommand, QueueableCommand, cursor};
 
 #[derive(Clone, Debug)]
 struct Editor {
     lines: Vec<String>,
-    loc_x: usize,
-    loc_y: usize,
+    cursor_x: usize,
+    cursor_y: usize,
 }
-fn render_pad(editor: Editor) {
-    let mut stdout = io::stdout();
 
-    stdout.queue(cursor::MoveTo(0, 0)).unwrap();
-    stdout.queue(terminal::Clear(ClearType::All)).unwrap();
-
+fn render(editor: &Editor, stdout: &mut io::Stdout) -> io::Result<()> {
+    stdout.queue(terminal::Clear(ClearType::All))?;
     for (i, line) in editor.lines.iter().enumerate() {
-        stdout.queue(cursor::MoveTo(0, i as u16)).unwrap();
-        write!(stdout, "{}", line).unwrap();
+        // for each row, have the cursor at the beginning of the line then print
+        stdout.queue(cursor::MoveTo(0, i as u16))?;
+        write!(stdout, "{}", line)?;
     }
-
-    stdout.queue(cursor::MoveTo(editor.loc_x as u16, editor.loc_y as u16)).unwrap();
-
-    stdout.flush().expect("failed to flush");
+    // we reset the pos of the cursor to be at the current pos of the Editor
+    stdout.queue(cursor::MoveTo(editor.cursor_x as u16, editor.cursor_y as u16))?;
+    stdout.flush()?;
+    Ok(())
 }
 
 fn main() -> io::Result<()> {
     let mut stdout = io::stdout();
-    
-    stdout.queue(EnterAlternateScreen)?;
+
+    stdout.execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
-    
-    let mut editor = Editor { lines: vec![String::new()], loc_x: 0, loc_y: 0 };
-    render_pad(editor.clone());
-    
+
+    let mut editor = Editor {
+        lines: vec![String::new()],
+        cursor_x: 0,
+        cursor_y: 0,
+    };
+
     loop {
+        render(&editor, &mut stdout)?;
         if let Event::Key(key_event) = event::read()? {
             match key_event.code {
                 KeyCode::Char(c) => {
-                if c == 'q' {
-                    break; 
+                    if KeyCode::Char(c) == KeyCode::Char('q') && key_event.modifiers.contains(event::KeyModifiers::CONTROL) {
+                        break;
+                    }
+                    if KeyCode::Char(c) == KeyCode::Char('s') && key_event.modifiers.contains(event::KeyModifiers::CONTROL) {
+                        std::fs::write("output.txt", editor.lines.join("\n"))?;
+                        continue;
+                    }
+                    editor.lines[editor.cursor_y].insert(editor.cursor_x, c);
+                    editor.cursor_x += 1;
+                },
+                KeyCode::Backspace => {
+                    if editor.cursor_x > 0 {
+                        editor.cursor_x -= 1;
+                        editor.lines[editor.cursor_y].remove(editor.cursor_x);
+                    } else if editor.cursor_y > 0 {
+                        // move this line above if there is a line above by appending it to the
+                        // line on top of it and removing the current line to shift all elements up
+                        let current_line = editor.lines.remove(editor.cursor_y);
+                        editor.cursor_y -= 1;
+                        editor.cursor_x = editor.lines[editor.cursor_y].len();
+                        editor.lines[editor.cursor_y].push_str(&current_line);
+                    }
+                },
+                KeyCode::Enter => {
+                    if editor.cursor_y <= editor.lines.len() - 1 {
+                        let new_line = editor.lines[editor.cursor_y][editor.cursor_x..].to_string();
+                        editor.lines[editor.cursor_y].truncate(editor.cursor_x);
+                        editor.lines.insert(editor.cursor_y + 1, new_line);
+                    } else {
+                        editor.lines.push(String::new());
+                    }
+                    editor.cursor_x = 0;
+                    editor.cursor_y += 1;
                 }
-                if editor.lines.is_empty() {
-                    editor.lines.push(String::new());
+                KeyCode::Left => {
+                    if editor.cursor_x > 0 {
+                        editor.cursor_x -= 1;
+                    }
+                },
+                KeyCode::Right => {
+                    if editor.cursor_x < editor.lines[editor.cursor_y].len() {
+                        editor.cursor_x += 1;
+                    }
+                },
+                KeyCode::Up => {
+                    if editor.cursor_y > 0 {
+                        editor.cursor_y -= 1;
+                        editor.cursor_x = editor.cursor_x.min(editor.lines[editor.cursor_y].len());
+                    }
+                },
+                KeyCode::Down => {
+                    if editor.cursor_y < editor.lines.len() - 1 {
+                        editor.cursor_y += 1;
+                        editor.cursor_x = editor.cursor_x.min(editor.lines[editor.cursor_y].len());
+                    }
                 }
-            editor.lines[editor.loc_y].insert(editor.loc_x, c);
-            editor.loc_x += 1;
-        },
-        KeyCode::Enter => {
-            editor.lines.push(String::new());
-            editor.loc_y += 1;
-            editor.loc_x = 0;
-        },
-        KeyCode::Backspace => {
-            if editor.loc_x > 0 {
-                editor.lines[editor.loc_y].remove(editor.loc_x - 1);
-                editor.loc_x -= 1;
+                _ => {
+                }
             }
         }
-        KeyCode::Esc => break,
-            _ => {},
-        }
-            render_pad(editor.clone());
-        }
     }
-    
-    // Exit alternate screen and disable raw mode
+
     disable_raw_mode()?;
-    stdout.queue(LeaveAlternateScreen)?;
-    stdout.flush()?;
-    
+    stdout.execute(LeaveAlternateScreen)?;
     Ok(())
 }
