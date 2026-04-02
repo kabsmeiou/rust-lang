@@ -77,11 +77,23 @@ fn main() -> io::Result<()> {
                 KeyCode::Left => {
                     if editor.cursor_x > 0 {
                         editor.cursor_x -= 1;
+                    } else {
+                        // if we are at the beginning of the line, move to the end of the previous line if there is one
+                        if editor.cursor_y > 0 {
+                            editor.cursor_y -= 1;
+                            editor.cursor_x = editor.lines[editor.cursor_y].len();
+                        }
                     }
                 },
                 KeyCode::Right => {
                     if editor.cursor_x < editor.lines[editor.cursor_y].len() {
                         editor.cursor_x += 1;
+                    } else {
+                        // opposite of the left case
+                        if editor.cursor_y < editor.lines.len() - 1 {
+                            editor.cursor_y += 1;
+                            editor.cursor_x = 0;
+                        }
                     }
                 },
                 KeyCode::Up => {
@@ -97,6 +109,10 @@ fn main() -> io::Result<()> {
                     }
                 }
                 _ => {
+                    // debug: write to a file to see what event is received
+                    use std::io::Write;
+                    let mut f = std::fs::OpenOptions::new().append(true).create(true).open("/tmp/rote_keys.log").unwrap();
+                    writeln!(f, "{:?}", key_event).unwrap();
                 }
             }
         }
