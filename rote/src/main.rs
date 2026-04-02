@@ -8,6 +8,7 @@ struct Editor {
     lines: Vec<String>,
     cursor_x: usize,
     cursor_y: usize,
+    insert_mode: bool,
 }
 
 fn render(editor: &Editor, stdout: &mut io::Stdout) -> io::Result<()> {
@@ -24,15 +25,39 @@ fn render(editor: &Editor, stdout: &mut io::Stdout) -> io::Result<()> {
 }
 
 fn main() -> io::Result<()> {
+    let args = std::env::args().collect::<Vec<String>>();
+
+    if args.len() < 2 {
+        eprintln!("Usage: {} <filename>", args[0]);
+        println!("
+How to start
+- rote <filename>: Start editing the specified file. If the file does not exist, it will be created.
+
+Controls:
+- Ctrl+Q: Quit
+- Ctrl+S: Save to output.txt
+        ");
+        std::process::exit(1);
+    }
+
+    let filename = &args[1];
+
+    let lines = std::fs::read_to_string(filename)
+        .unwrap_or_else(|_| String::new())
+        .lines()
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>();
+
     let mut stdout = io::stdout();
 
     stdout.execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
 
     let mut editor = Editor {
-        lines: vec![String::new()],
+        lines,
         cursor_x: 0,
         cursor_y: 0,
+        insert_mode: true,
     };
 
     loop {
@@ -45,6 +70,15 @@ fn main() -> io::Result<()> {
                     }
                     if KeyCode::Char(c) == KeyCode::Char('s') && key_event.modifiers.contains(event::KeyModifiers::CONTROL) {
                         std::fs::write("output.txt", editor.lines.join("\n"))?;
+                        continue;
+                    }
+                    if KeyCode::Char(c) == KeyCode::Char('t') && key_event.modifiers.contains(event::KeyModifiers::CONTROL) {
+                        editor.insert_mode = !editor.insert_mode;
+                        continue;
+                    }
+                    if !editor.insert_mode && editor.cursor_x < editor.lines[editor.cursor_y].len() {
+                        editor.lines[editor.cursor_y].replace_range(editor.cursor_x..editor.cursor_x + 1, &c.to_string());
+                        editor.cursor_x += 1;
                         continue;
                     }
                     editor.lines[editor.cursor_y].insert(editor.cursor_x, c);
