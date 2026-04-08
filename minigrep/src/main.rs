@@ -14,16 +14,23 @@ struct Config {
 }
 
 impl Config {
-    pub fn build(args: &[String]) -> Result<Config, &'static str> {
-        if args.len() < 3 {
-            return Err("not enough args");
-        }
+    pub fn build(
+        mut args: impl Iterator<Item = String>,
+    ) -> Result<Config, &'static str> {
+        args.next();
 
-        let query = args[1].clone();
-        let file_path = args[2].clone();
+        let query = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get a query string")
+        };
+
+        let file_path = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get a file path")
+        };
 
         // inline arg takes precedence if --ignore is enabled
-        let arg_ignore = match args.get(3) {
+        let arg_ignore = match args.next() {
             Some(v) =>  {
                 if v != "--ignore" {
                     eprintln!("Does not know what to do with {v}.");
@@ -35,16 +42,13 @@ impl Config {
         };
         
         let ignore_case = if arg_ignore { arg_ignore } else { env::var("IGNORE_CASE").is_ok_and(|x| x == "1") };
-            
 
         Ok(Config { query, file_path, ignore_case })
     }
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-
-    let config: Config = Config::build(&args).unwrap_or_else(|err| {
+    let config: Config = Config::build(env::args()).unwrap_or_else(|err| {
         eprintln!("Encountered an issue during parsing: {err}");
         process::exit(1);
     });
@@ -69,4 +73,50 @@ fn run(config: Config) -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_config_with_ignore_case() {
+        let args = vec![
+            String::from("minigrep"),   // argv[0], skipped by build
+            String::from("to"),         // query
+            String::from("poem.txt"),   // file_path
+            String::from("--ignore"),   // optional flag
+        ]
+        .into_iter();
+
+        let config = Config::build(args).unwrap();
+
+        assert!(config.ignore_case);
+        assert_eq!(config.query, "to");
+        assert_eq!(config.file_path, "poem.txt");
+    }
+
+    #[test]
+    fn run_config() {
+        let config = Config {
+            query: String::from("test"),
+            file_path: String::from("poem.txt"),
+            ignore_case: false
+        };
+
+        let resp = run(config);
+        assert!(resp.is_ok());
+    }
+
+    #[test]
+    fn run_config_file_not_found() {
+        let config = Config {
+            query: String::from("test"),
+            file_path: String::from("file_not_found.txt"),
+            ignore_case: false
+        };
+
+        let resp = run(config);
+        assert!(resp.is_err());
+    }
 }
