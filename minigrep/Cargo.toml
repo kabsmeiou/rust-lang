@@ -1,3 +1,27 @@
+[profile.release-opt0]
+inherits = "release"
+opt-level = 0
+
+[profile.release-opt1]
+inherits = "release"
+opt-level = 1
+
+[profile.release-opt2]
+inherits = "release"
+opt-level = 2
+
+[profile.release-opt3]
+inherits = "release"
+opt-level = 3
+
+[profile.release-opts]
+inherits = "release"
+opt-level = "s"
+
+[profile.release-optz]
+inherits = "release"
+opt-level = "z"
+
 [package]
 name = "minigrep"
 version = "0.1.0"
