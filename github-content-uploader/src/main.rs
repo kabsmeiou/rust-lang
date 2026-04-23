@@ -5,9 +5,10 @@ mod model;
 
 use clap::{Parser, Subcommand};
 use std::process::Command;
-use model::{Blog, ContentType, Experience, Project, Promptable};
+use model::{Blog, ContentType, Content, Experience, Project, Promptable};
+use serde::Serialize;
 
-const REPO_PATH: &str = "C:/Users/fanta/Documents/GitHub/kabsmeiou.github.io";
+const REPO_PATH: &str = "C:/Users/fanta/Documents/GitHub/kabsmeiou.github.io/content";
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -24,14 +25,38 @@ enum Action {
     },    
     Push {              // push content in local storage to github
         name: Option<String>,   // name of the content to be pushed, should match the name in local storage
-    },       
-    List,       // list content in local storage
+    },
     Remove {            // remove specified content from local storage
         name: String, 
     },     
     Edit {              // edit specified content in local storage
         name: String,  
     },
+}
+
+fn get_file_name(content_type: &ContentType) -> &'static str {
+    match content_type {
+        ContentType::Blog => "blogs.json",
+        ContentType::Experience => "experiences.json",
+        ContentType::Project => "projects.json",
+    }
+}
+
+fn save<T: Serialize + Content>(item: T) {
+    let file_path = std::path::Path::new(REPO_PATH).join(get_file_name(&item.content_type()));
+
+    let mut items: Vec<serde_json::Value> = if file_path.exists() {
+        let contents = std::fs::read_to_string(&file_path).expect("Failed to read file");
+        serde_json::from_str(&contents).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    let new_item = serde_json::to_value(&item).expect("Failed to serialize item");
+    items.insert(0, new_item);
+
+    let json = serde_json::to_string_pretty(&items).expect("Failed to serialize JSON");
+    std::fs::write(&file_path, json).expect("Failed to write JSON to file");
 }
 
 fn git(args: &[&str], repo_path: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -57,11 +82,44 @@ fn commit_and_push(content_name: &str) -> Result<(), Box<dyn std::error::Error>>
 
 fn handle_add(content_type: ContentType) {
     match content_type {
-        ContentType::Blog => { let _item = Blog::prompt(); }
-        ContentType::Experience => { let _item = Experience::prompt(); }
-        ContentType::Project => { let _item = Project::prompt(); }
+        ContentType::Blog => { save(Blog::prompt()) },
+        ContentType::Experience => { save(Experience::prompt()) }
+        ContentType::Project => { save(Project::prompt()) }
+    };
+}
+
+fn handle_push(name: String) {
+    if let Err(e) = commit_and_push(&name) {
+        eprintln!("Error pushing content: {}", e);
     }
-    // need to write on the .json file then commit and push to github
+}
+
+fn handle_remove(name: String) {
+    // check all files
+    // find the content name in the file and remove it
+    // save the file again
+    let content_types = [ContentType::Blog, ContentType::Project];
+    for content_type in &content_types {
+        let file_path = std::path::Path::new(REPO_PATH).join(get_file_name(content_type));
+        if file_path.exists() {
+            let contents = std::fs::read_to_string(&file_path).expect("Failed to read file");
+            let mut items: Vec<serde_json::Value> = serde_json::from_str(&contents).unwrap_or_default();
+            let original_len = items.len();
+            items.retain(|item| {
+                let item_name = item.get("title").or_else(|| item.get("id"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("");
+                item_name != name
+            });
+            if items.len() < original_len {
+                let json = serde_json::to_string_pretty(&items).expect("Failed to serialize JSON");
+                std::fs::write(&file_path, json).expect("Failed to write JSON to file");
+                println!("Content '{}' removed successfully.", name);
+                return;
+            }
+        }
+    }
+    eprintln!("Content '{}' not found.", name);
 }
 
 fn main() {
@@ -72,12 +130,17 @@ fn main() {
     let args = Args::parse();
 
     match args.command {
-        Action::Add { content_type } => match content_type {
-            ContentType::Blog => { let _item = Blog::prompt(); }
-            ContentType::Experience => { let _item = Experience::prompt(); }
-            ContentType::Project => { let _item = Project::prompt(); }
+        Action::Add { content_type } => handle_add(content_type),
+        Action::Push { name } => {
+            if let Some(name) = name {
+                handle_push(name);
+            } else {
+                eprintln!("Content name is required for pushing");
+            }
         },
-        _ => todo!(),
+        Action::Remove { name } => handle_remove(name),
+        Action::Edit { name } => todo!(),
+        _ => eprintln!("Unsupported action"),
     }
 }
 

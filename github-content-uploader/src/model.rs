@@ -10,7 +10,7 @@ pub enum ContentType {
     Project,
 }
 
-trait Content {
+pub trait Content {
     fn content_type(&self) -> ContentType;
 }
 
@@ -20,7 +20,7 @@ pub trait Promptable: Sized {
 
 // Struct to represent a JSON generator for a given type T
 // should match the structure of the said type
-struct JsonGen<T: Content> {
+pub struct JsonGen<T: Content> {
     item: T,
 }
 
@@ -35,6 +35,7 @@ impl<T: Content> JsonGen<T> {
 pub struct Blog {
     id: String,
     title: String,
+    content: String,
     published_date: String,
     last_updated_date: String,
     tags: Vec<String>,
@@ -74,6 +75,7 @@ impl Promptable for Blog {
         let now = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
         let title: String = Input::new().with_prompt("Title").interact_text().unwrap();
+        let content: String = Input::new().with_prompt("Short description").interact_text().unwrap();
         let published_date: String = Input::new().with_prompt("Published Date").default(now.clone()).interact_text().unwrap();
         let last_updated_date: String = Input::new().with_prompt("Last Updated Date").default(now).interact_text().unwrap();
         let mut tags = Vec::new();
@@ -89,6 +91,7 @@ impl Promptable for Blog {
         Blog {
             id: String::new(),
             title,
+            content,
             published_date,
             last_updated_date,
             tags,
