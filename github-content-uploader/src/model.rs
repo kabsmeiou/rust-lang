@@ -2,8 +2,9 @@ use chrono::Utc;
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 use dialoguer::Input;
+use crate::REPO_PATH;
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum ContentType {
     Blog,
     Experience,
@@ -29,7 +30,7 @@ impl<T: Content> JsonGen<T> {
         JsonGen { item }
     }
 }
-
+    
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Blog {
@@ -70,9 +71,63 @@ impl Content for Blog {
     }
 }
 
+// convert filename of .md to id by replacing spaces with dashes, removing special characters, and converting to lowercase and removing the .md extension if it exists
+fn convert_file_name_to_id(file_name: &str) -> String {
+    file_name.to_lowercase().replace(" ", "-").replace(".md", "").replace(|c: char| !c.is_alphanumeric() && c != '-', "").to_string()
+}
+
+fn validate_file(dir: &str, content_type: ContentType) -> bool {
+    // check first if it exists
+    // then if it does, check if its already in the json file
+    // assume dir is full file to .md file, content_type is needed to determine the json file
+    let file_path = match content_type {
+        ContentType::Blog => format!("{}/blogs.json", REPO_PATH),
+        ContentType::Project => format!("{}/projects.json", REPO_PATH),
+        ContentType::Experience => format!("{}/experiences.json", REPO_PATH),
+    };
+    if !std::path::Path::new(dir).exists() {
+        println!("File {} does not exist. Please enter a valid file.", dir);
+        return false;
+    }
+    if std::path::Path::new(&file_path).exists() {
+        let contents = std::fs::read_to_string(&file_path).expect("Failed to read file");
+        let items: Vec<serde_json::Value> = serde_json::from_str(&contents).unwrap_or_default();
+        let id = convert_file_name_to_id(dir);
+        for item in items {
+            if item["id"] == id {
+                println!("JSON entry for file {} already exists", dir);
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn get_content_dir(content_type: ContentType) -> String {
+    let file_path = match content_type {
+        ContentType::Blog => format!("{}/blogs/", REPO_PATH),
+        ContentType::Project => format!("{}/projects/", REPO_PATH),
+        ContentType::Experience => format!("{}/experiences/", REPO_PATH),
+    };
+    let mut content_dir: String = String::new();
+    while true {
+        content_dir = Input::new().with_prompt("Content Directory").interact_text().unwrap();
+        let full_dir = format!("{}{}", file_path, content_dir);
+
+        if validate_file(&full_dir, content_type.clone()) {
+            content_dir = full_dir;
+            break;
+        }
+    };
+    content_dir
+}
+
 impl Promptable for Blog {
     fn prompt() -> Self {
         let now = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
+        // get content dir / file name of the .md file
+        let content_dir: String = get_content_dir(ContentType::Blog);
 
         let title: String = Input::new().with_prompt("Title").interact_text().unwrap();
         let content: String = Input::new().with_prompt("Short description").interact_text().unwrap();
@@ -87,9 +142,11 @@ impl Promptable for Blog {
             tags.push(tag);
         }
         let read_time_in_minutes: u32 = Input::<u32>::new().with_prompt("Read Time (in minutes)").interact_text().unwrap();
+        
+        let id = convert_file_name_to_id(&content_dir);
 
         Blog {
-            id: String::new(),
+            id,
             title,
             content,
             published_date,
@@ -139,6 +196,8 @@ impl Content for Project {
 
 impl Promptable for Project {
     fn prompt() -> Self {
+        let content_dir: String = get_content_dir(ContentType::Project);
+
         let name: String = Input::new().with_prompt("Project Name").interact_text().unwrap();
         let description: String = Input::new().with_prompt("Description").interact_text().unwrap();
         let mut tags = Vec::new();
@@ -160,8 +219,10 @@ impl Promptable for Project {
             sample_images.push(img);
         }
 
+        let id = convert_file_name_to_id(&content_dir);
+
         Project {
-            id: String::new(),
+            id,
             name,
             description,
             tags,

@@ -8,7 +8,15 @@ use std::process::Command;
 use model::{Blog, ContentType, Content, Experience, Project, Promptable};
 use serde::Serialize;
 
+// path differs depending on the operating system.
+#[cfg(target_os = "windows")]
 const REPO_PATH: &str = "C:/Users/fanta/Documents/GitHub/kabsmeiou.github.io/content";
+
+#[cfg(target_os = "macos")]
+const REPO_PATH: &str = "/Users/cerefrid/Documents/funspace/christiancabral.github.io/content";
+
+#[cfg(target_os = "linux")]
+const REPO_PATH: &str = "/home/cerefrid/Documents/code/kabsmeiou.github.io/content";
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -94,29 +102,34 @@ fn handle_push(name: String) {
     }
 }
 
-fn handle_remove(name: String) {
-    // check all files
-    // find the content name in the file and remove it
-    // save the file again
-    let content_types = [ContentType::Blog, ContentType::Project];
+fn load_all_content() -> Vec<(ContentType, Vec<serde_json::Value>)> {
+    let content_types = [ContentType::Blog, ContentType::Experience, ContentType::Project];
+    let mut all_content = Vec::new();
+
     for content_type in &content_types {
         let file_path = std::path::Path::new(REPO_PATH).join(get_file_name(content_type));
         if file_path.exists() {
             let contents = std::fs::read_to_string(&file_path).expect("Failed to read file");
-            let mut items: Vec<serde_json::Value> = serde_json::from_str(&contents).unwrap_or_default();
-            let original_len = items.len();
-            items.retain(|item| {
-                let item_name = item.get("title").or_else(|| item.get("id"))
-                    .and_then(|n| n.as_str())
-                    .unwrap_or("");
-                item_name != name
-            });
-            if items.len() < original_len {
-                let json = serde_json::to_string_pretty(&items).expect("Failed to serialize JSON");
-                std::fs::write(&file_path, json).expect("Failed to write JSON to file");
-                println!("Content '{}' removed successfully.", name);
-                return;
-            }
+            let items: Vec<serde_json::Value> = serde_json::from_str(&contents).unwrap_or_default();
+            all_content.push((content_type.clone(), items));
+        }
+    }
+    all_content
+}
+
+fn handle_remove(name: String) {
+    // check all files
+    // find the content name in the file and remove it
+    // save the file again
+    let mut all_content = load_all_content();
+    for (content_type, items) in &mut all_content {
+        if let Some(pos) = items.iter().position(|item| item["id"] == name) {
+            items.remove(pos);
+            let file_path = std::path::Path::new(REPO_PATH).join(get_file_name(content_type));
+            let json = serde_json::to_string_pretty(&items).expect("Failed to serialize JSON");
+            std::fs::write(&file_path, json).expect("Failed to write JSON to file");
+            println!("Content '{}' removed successfully.", name);
+            return;
         }
     }
     eprintln!("Content '{}' not found.", name);
