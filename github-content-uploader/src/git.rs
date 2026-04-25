@@ -14,10 +14,10 @@ fn git(args: &[&str], repo_path: &str) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
-pub fn commit_and_push(content_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn commit_and_push(content_id: &str) -> Result<(), Box<dyn std::error::Error>> {
     git(&["pull"], REPO_PATH)?; // pull latest changes before pushing
     git(&["add", "."], REPO_PATH)?;
-    git(&["commit", "-m", &format!("Add new content: {}", content_name)], REPO_PATH)?;
+    git(&["commit", "-m", &format!("Add new content: {}", content_id)], REPO_PATH)?;
     git(&["push"], REPO_PATH)?;
     Ok(())
 }

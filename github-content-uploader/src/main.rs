@@ -11,7 +11,7 @@ mod util;
 
 use clap::{Parser, Subcommand};
 use models::ContentType;
-use commands::{handle_add, handle_push, handle_remove};
+use commands::{handle_add, handle_push, handle_remove, handle_edit};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -27,13 +27,15 @@ enum Action {
         content_type: ContentType,
     },    
     Push {              // push content in local storage to github
-        name: Option<String>,   // name of the content to be pushed, should match the name in local storage
+        id: Option<String>,   // ID of the content to be pushed, should match the ID in the repo
     },
     Remove {            // remove specified content from local storage
-        name: String, 
+        id: String, 
     },     
     Edit {              // edit specified content in local storage
-        name: String,  
+        id: String,
+        field: String,
+        value: String,
     },
 }
 
@@ -42,15 +44,15 @@ fn main() {
 
     match args.command {
         Action::Add { content_type } => handle_add(content_type),
-        Action::Push { name } => {
-            if let Some(name) = name {
-                handle_push(name);
+        Action::Push { id } => {
+            if let Some(id) = id {
+                handle_push(id);
             } else {
-                eprintln!("Content name is required for pushing");
+                eprintln!("Content ID is required for pushing");
             }
         },
-        Action::Remove { name } => handle_remove(name),
-        Action::Edit { name } => todo!(),
+        Action::Remove { id } => handle_remove(id),
+        Action::Edit { id, field, value } => handle_edit(id, field, value),
         _ => eprintln!("Unsupported action"),
     }
 }

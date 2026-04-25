@@ -21,7 +21,7 @@ pub fn save<T: Serialize + Content>(item: T) {
     std::fs::write(&file_path, json).expect("Failed to write JSON to file");
 }
 
-pub fn load_all_content() -> Vec<(ContentType, Vec<serde_json::Value>)> {
+pub fn load_all_entries() -> Vec<(ContentType, Vec<serde_json::Value>)> {
     let content_types = [ContentType::Blog, ContentType::Experience, ContentType::Project];
     let mut all_content = Vec::new();
 
